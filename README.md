@@ -43,7 +43,7 @@ Set `DATABASE_URL` in the deployment environment to your PostgreSQL connection s
 npm run prisma:migrate:deploy
 ```
 
-`npm start` runs `uploads:init` and checks for `.next/BUILD_ID`; if the production build is missing it runs `npm run build` automatically before `next start`.
+`npm start` runs `uploads:init` and checks for `.next/BUILD_ID`; if the production build is missing it runs `npm run build` automatically before starting Next.
 
 ## Notes
 
