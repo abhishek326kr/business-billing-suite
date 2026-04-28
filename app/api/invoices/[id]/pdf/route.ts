@@ -5,45 +5,54 @@ import { getBusinessProfile, getInvoiceById } from "@/lib/data";
 import { generateInvoicePdf } from "@/lib/pdf";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
-  const userId = await getCurrentUserId();
-  if (!userId) {
-    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  }
-
-  const [invoice, profile] = await Promise.all([
-    getInvoiceById(id, userId),
-    getBusinessProfile(userId)
-  ]);
-
-  if (!invoice || !profile) {
-    return NextResponse.json({ error: "Invoice not found." }, { status: 404 });
-  }
-
-  const pdf = await generateInvoicePdf({
-    invoiceNumber: invoice.invoiceNumber,
-    date: invoice.date,
-    status: invoice.status,
-    amount: invoice.amount,
-    currency: invoice.currency,
-    productName: invoice.productName,
-    services: invoice.services,
-    validity: invoice.validity,
-    signaturePath: invoice.signaturePath,
-    signatureName: invoice.signatureName,
-    customer: invoice.customer,
-    business: profile
-  });
-
-  return new NextResponse(new Uint8Array(pdf), {
-    headers: {
-      "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="${invoice.invoiceNumber}.pdf"`
+  try {
+    const { id } = await params;
+    const userId = await getCurrentUserId();
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
-  });
+
+    const [invoice, profile] = await Promise.all([
+      getInvoiceById(id, userId),
+      getBusinessProfile(userId)
+    ]);
+
+    if (!invoice || !profile) {
+      return NextResponse.json({ error: "Invoice not found." }, { status: 404 });
+    }
+
+    const pdf = await generateInvoicePdf({
+      invoiceNumber: invoice.invoiceNumber,
+      date: invoice.date,
+      status: invoice.status,
+      amount: invoice.amount,
+      currency: invoice.currency,
+      productName: invoice.productName,
+      services: invoice.services,
+      validity: invoice.validity,
+      signaturePath: invoice.signaturePath,
+      signatureName: invoice.signatureName,
+      customer: invoice.customer,
+      business: profile
+    });
+
+    return new NextResponse(new Uint8Array(pdf), {
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `inline; filename="${invoice.invoiceNumber}.pdf"`
+      }
+    });
+  } catch (error) {
+    console.error("Invoice PDF route failed.", error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Unable to generate invoice PDF." },
+      { status: 500 }
+    );
+  }
 }

@@ -1,7 +1,7 @@
 import "server-only";
 
 import path from "path";
-import PDFDocument from "pdfkit";
+import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import puppeteer from "puppeteer";
 import { pathToFileURL } from "url";
 
@@ -206,161 +206,279 @@ function getCustomerAddress(invoice: InvoicePdfData) {
     .join(", ");
 }
 
-function generateFallbackInvoicePdf(invoice: InvoicePdfData) {
-  return new Promise<Buffer>((resolve, reject) => {
-    const doc = new PDFDocument({
-      size: "A4",
-      margin: 42,
-      bufferPages: false
+function pdfColor(hex: string) {
+  const normalized = hex.replace("#", "");
+  return rgb(
+    parseInt(normalized.slice(0, 2), 16) / 255,
+    parseInt(normalized.slice(2, 4), 16) / 255,
+    parseInt(normalized.slice(4, 6), 16) / 255
+  );
+}
+
+function safePdfText(value?: string | number | null) {
+  return `${value ?? ""}`
+    .normalize("NFKD")
+    .replace(/[^\x20-\x7E]/g, "")
+    .trim();
+}
+
+function formatPdfCurrency(amount: number, currency: string) {
+  if (currency === "INR") {
+    return `INR ${new Intl.NumberFormat("en-US", {
+      maximumFractionDigits: 2,
+      minimumFractionDigits: 2
+    }).format(amount)}`;
+  }
+
+  return safePdfText(formatCurrency(amount, currency));
+}
+
+function wrapPdfText(text: string, font: PDFFont, size: number, maxWidth: number) {
+  const words = safePdfText(text).split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let line = "";
+
+  for (const word of words) {
+    const nextLine = line ? `${line} ${word}` : word;
+
+    if (font.widthOfTextAtSize(nextLine, size) <= maxWidth) {
+      line = nextLine;
+      continue;
+    }
+
+    if (line) {
+      lines.push(line);
+    }
+
+    line = word;
+  }
+
+  if (line) {
+    lines.push(line);
+  }
+
+  return lines.length ? lines : [""];
+}
+
+function drawPdfTextBlock({
+  page,
+  text,
+  x,
+  y,
+  maxWidth,
+  font,
+  size,
+  color = "#12203f",
+  lineHeight = size + 4
+}: {
+  page: PDFPage;
+  text: string;
+  x: number;
+  y: number;
+  maxWidth: number;
+  font: PDFFont;
+  size: number;
+  color?: string;
+  lineHeight?: number;
+}) {
+  let currentY = y;
+
+  for (const line of wrapPdfText(text, font, size, maxWidth)) {
+    page.drawText(line, {
+      x,
+      y: currentY,
+      size,
+      font,
+      color: pdfColor(color)
     });
-    const chunks: Buffer[] = [];
-    const pageWidth = doc.page.width;
-    const contentWidth = pageWidth - doc.page.margins.left - doc.page.margins.right;
-    const left = doc.page.margins.left;
-    const rightColumn = pageWidth - doc.page.margins.right - 190;
-    const customerAddress = getCustomerAddress(invoice);
-    const amount = formatCurrency(invoice.amount, invoice.currency);
-    const isPaid = invoice.status.toLowerCase() === "paid";
+    currentY -= lineHeight;
+  }
 
-    doc.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
-    doc.on("error", reject);
-    doc.on("end", () => resolve(Buffer.concat(chunks)));
+  return currentY;
+}
 
-    doc.rect(0, 0, pageWidth, 28).fill("#0f2460");
-    doc.rect(0, 28, pageWidth, 3).fill("#3d61c5");
+async function generateFallbackInvoicePdf(invoice: InvoicePdfData) {
+  const pdfDoc = await PDFDocument.create();
+  const page = pdfDoc.addPage([595.28, 841.89]);
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const italic = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
+  const width = page.getWidth();
+  const height = page.getHeight();
+  const left = 42;
+  const contentWidth = width - 84;
+  const rightColumn = width - 232;
+  const amount = formatPdfCurrency(invoice.amount, invoice.currency);
+  const customerAddress = getCustomerAddress(invoice) || "Address not provided";
+  const isPaid = invoice.status.toLowerCase() === "paid";
 
-    doc
-      .fillColor("#0f2460")
-      .fontSize(24)
-      .font("Helvetica-Bold")
-      .text(invoice.business.businessName, left, 58, { width: 300 });
+  page.drawRectangle({ x: 0, y: height - 28, width, height: 28, color: pdfColor("#0f2460") });
+  page.drawRectangle({ x: 0, y: height - 31, width, height: 3, color: pdfColor("#3d61c5") });
 
-    doc
-      .fillColor("#52607f")
-      .fontSize(10)
-      .font("Helvetica")
-      .text(invoice.business.website || "Website not set", left, 88, { width: 300 })
-      .text(invoice.business.email || "Email not set", left, 104, { width: 300 });
-
-    doc
-      .fillColor("#0f2460")
-      .fontSize(34)
-      .font("Helvetica-Bold")
-      .text("INVOICE", rightColumn, 58, { width: 190, align: "right" });
-
-    doc
-      .fillColor("#33415f")
-      .fontSize(11)
-      .font("Helvetica-Bold")
-      .text(invoice.invoiceNumber, rightColumn, 98, { width: 190, align: "right" })
-      .font("Helvetica")
-      .text(formatDate(invoice.date), rightColumn, 116, { width: 190, align: "right" });
-
-    doc.moveTo(left, 150).lineTo(left + contentWidth, 150).strokeColor("#dbe4f3").stroke();
-
-    doc
-      .roundedRect(left, 168, 76, 24, 12)
-      .fill(isPaid ? "#e8fff1" : "#fff0f0")
-      .fillColor(isPaid ? "#13743b" : "#b42318")
-      .fontSize(10)
-      .font("Helvetica-Bold")
-      .text(isPaid ? "PAID" : "UNPAID", left, 175, { width: 76, align: "center" });
-
-    doc
-      .fillColor("#0f2460")
-      .fontSize(10)
-      .font("Helvetica-Bold")
-      .text("BILL TO", left, 220);
-
-    doc
-      .fillColor("#12203f")
-      .fontSize(16)
-      .text(invoice.customer.name, left, 240, { width: 260 });
-
-    doc
-      .fillColor("#52607f")
-      .fontSize(10)
-      .font("Helvetica")
-      .text(customerAddress || "Address not provided", left, 265, { width: 260, lineGap: 4 })
-      .text(invoice.customer.phone || "Phone not provided", left, doc.y + 8, { width: 260 })
-      .text(invoice.customer.email, left, doc.y + 4, { width: 260 });
-
-    doc
-      .fillColor("#0f2460")
-      .fontSize(10)
-      .font("Helvetica-Bold")
-      .text("SIGNATURE", rightColumn, 220, { width: 190 });
-
-    doc
-      .roundedRect(rightColumn, 240, 190, 58, 8)
-      .strokeColor("#cbd7ef")
-      .dash(4, { space: 4 })
-      .stroke()
-      .undash();
-
-    doc
-      .fillColor("#0f2460")
-      .fontSize(15)
-      .font("Helvetica-Oblique")
-      .text(invoice.signatureName || "Authorized signature", rightColumn + 10, 262, {
-        width: 170,
-        align: "center"
-      });
-
-    const tableTop = 350;
-    const rowHeight = 52;
-
-    doc.rect(left, tableTop, contentWidth, 30).fill("#0f2460");
-    doc
-      .fillColor("#ffffff")
-      .fontSize(9)
-      .font("Helvetica-Bold")
-      .text("PRODUCT NAME", left + 12, tableTop + 10, { width: 145 })
-      .text("SERVICES INCLUDED", left + 170, tableTop + 10, { width: 150 })
-      .text("VALIDITY", left + 330, tableTop + 10, { width: 80 })
-      .text("AMOUNT", left + 420, tableTop + 10, { width: 90, align: "right" });
-
-    doc.rect(left, tableTop + 30, contentWidth, rowHeight).fill("#f8fbff");
-    doc
-      .fillColor("#12203f")
-      .fontSize(10)
-      .font("Helvetica")
-      .text(invoice.productName, left + 12, tableTop + 46, { width: 145 })
-      .text(invoice.services || "Included as agreed", left + 170, tableTop + 46, { width: 150 })
-      .text(invoice.validity || "Standard", left + 330, tableTop + 46, { width: 80 })
-      .font("Helvetica-Bold")
-      .text(amount, left + 420, tableTop + 46, { width: 90, align: "right" });
-
-    const summaryLeft = pageWidth - doc.page.margins.right - 220;
-    const summaryTop = tableTop + 120;
-
-    doc
-      .fillColor("#12203f")
-      .font("Helvetica")
-      .fontSize(11)
-      .text("Subtotal", summaryLeft, summaryTop)
-      .text(amount, summaryLeft + 110, summaryTop, { width: 110, align: "right" })
-      .text("Tax", summaryLeft, summaryTop + 26)
-      .text("0%", summaryLeft + 110, summaryTop + 26, { width: 110, align: "right" });
-
-    doc.rect(summaryLeft, summaryTop + 52, 220, 34).fill("#0f2460");
-    doc
-      .fillColor("#ffffff")
-      .font("Helvetica-Bold")
-      .text("Total", summaryLeft + 12, summaryTop + 63)
-      .text(amount, summaryLeft + 110, summaryTop + 63, { width: 98, align: "right" });
-
-    doc
-      .fillColor("#52607f")
-      .font("Helvetica")
-      .fontSize(9)
-      .text([invoice.business.website, invoice.business.email].filter(Boolean).join(" | "), left, 770, {
-        width: contentWidth,
-        align: "center"
-      });
-
-    doc.end();
+  page.drawText(safePdfText(invoice.business.businessName) || "Business", {
+    x: left,
+    y: 758,
+    size: 24,
+    font: bold,
+    color: pdfColor("#0f2460")
   });
+  page.drawText(safePdfText(invoice.business.website || "Website not set"), {
+    x: left,
+    y: 736,
+    size: 10,
+    font,
+    color: pdfColor("#52607f")
+  });
+  page.drawText(safePdfText(invoice.business.email || "Email not set"), {
+    x: left,
+    y: 720,
+    size: 10,
+    font,
+    color: pdfColor("#52607f")
+  });
+
+  page.drawText("INVOICE", {
+    x: rightColumn,
+    y: 754,
+    size: 34,
+    font: bold,
+    color: pdfColor("#0f2460")
+  });
+  page.drawText(safePdfText(invoice.invoiceNumber), {
+    x: rightColumn,
+    y: 728,
+    size: 11,
+    font: bold,
+    color: pdfColor("#33415f")
+  });
+  page.drawText(safePdfText(formatDate(invoice.date)), {
+    x: rightColumn,
+    y: 712,
+    size: 10,
+    font,
+    color: pdfColor("#33415f")
+  });
+
+  page.drawLine({
+    start: { x: left, y: 680 },
+    end: { x: left + contentWidth, y: 680 },
+    thickness: 1,
+    color: pdfColor("#dbe4f3")
+  });
+
+  page.drawRectangle({
+    x: left,
+    y: 650,
+    width: 76,
+    height: 24,
+    color: pdfColor(isPaid ? "#e8fff1" : "#fff0f0")
+  });
+  page.drawText(isPaid ? "PAID" : "UNPAID", {
+    x: left + 18,
+    y: 657,
+    size: 10,
+    font: bold,
+    color: pdfColor(isPaid ? "#13743b" : "#b42318")
+  });
+
+  page.drawText("BILL TO", {
+    x: left,
+    y: 612,
+    size: 10,
+    font: bold,
+    color: pdfColor("#0f2460")
+  });
+  page.drawText(safePdfText(invoice.customer.name) || "Customer", {
+    x: left,
+    y: 590,
+    size: 16,
+    font: bold,
+    color: pdfColor("#12203f")
+  });
+  let customerY = drawPdfTextBlock({
+    page,
+    text: customerAddress,
+    x: left,
+    y: 568,
+    maxWidth: 260,
+    font,
+    size: 10,
+    color: "#52607f"
+  });
+  customerY -= 8;
+  page.drawText(safePdfText(invoice.customer.phone || "Phone not provided"), {
+    x: left,
+    y: customerY,
+    size: 10,
+    font,
+    color: pdfColor("#52607f")
+  });
+  page.drawText(safePdfText(invoice.customer.email), {
+    x: left,
+    y: customerY - 16,
+    size: 10,
+    font,
+    color: pdfColor("#52607f")
+  });
+
+  page.drawText("SIGNATURE", {
+    x: rightColumn,
+    y: 612,
+    size: 10,
+    font: bold,
+    color: pdfColor("#0f2460")
+  });
+  page.drawRectangle({
+    x: rightColumn,
+    y: 532,
+    width: 190,
+    height: 58,
+    borderWidth: 1,
+    borderColor: pdfColor("#cbd7ef"),
+    color: pdfColor("#f8fbff")
+  });
+  page.drawText(safePdfText(invoice.signatureName || "Authorized signature"), {
+    x: rightColumn + 18,
+    y: 555,
+    size: 14,
+    font: italic,
+    color: pdfColor("#0f2460")
+  });
+
+  const tableTop = 465;
+  page.drawRectangle({ x: left, y: tableTop, width: contentWidth, height: 30, color: pdfColor("#0f2460") });
+  page.drawText("PRODUCT NAME", { x: left + 12, y: tableTop + 11, size: 9, font: bold, color: pdfColor("#ffffff") });
+  page.drawText("SERVICES INCLUDED", { x: left + 170, y: tableTop + 11, size: 9, font: bold, color: pdfColor("#ffffff") });
+  page.drawText("VALIDITY", { x: left + 330, y: tableTop + 11, size: 9, font: bold, color: pdfColor("#ffffff") });
+  page.drawText("AMOUNT", { x: left + 430, y: tableTop + 11, size: 9, font: bold, color: pdfColor("#ffffff") });
+  page.drawRectangle({ x: left, y: tableTop - 54, width: contentWidth, height: 54, color: pdfColor("#f8fbff") });
+
+  drawPdfTextBlock({ page, text: invoice.productName, x: left + 12, y: tableTop - 20, maxWidth: 145, font, size: 10 });
+  drawPdfTextBlock({ page, text: invoice.services || "Included as agreed", x: left + 170, y: tableTop - 20, maxWidth: 150, font, size: 10 });
+  drawPdfTextBlock({ page, text: invoice.validity || "Standard", x: left + 330, y: tableTop - 20, maxWidth: 80, font, size: 10 });
+  page.drawText(amount, { x: left + 420, y: tableTop - 20, size: 10, font: bold, color: pdfColor("#12203f") });
+
+  const summaryLeft = width - 262;
+  const summaryTop = 335;
+  page.drawText("Subtotal", { x: summaryLeft, y: summaryTop, size: 11, font, color: pdfColor("#12203f") });
+  page.drawText(amount, { x: summaryLeft + 110, y: summaryTop, size: 11, font, color: pdfColor("#12203f") });
+  page.drawText("Tax", { x: summaryLeft, y: summaryTop - 26, size: 11, font, color: pdfColor("#12203f") });
+  page.drawText("0%", { x: summaryLeft + 110, y: summaryTop - 26, size: 11, font, color: pdfColor("#12203f") });
+  page.drawRectangle({ x: summaryLeft, y: summaryTop - 74, width: 220, height: 34, color: pdfColor("#0f2460") });
+  page.drawText("Total", { x: summaryLeft + 12, y: summaryTop - 63, size: 11, font: bold, color: pdfColor("#ffffff") });
+  page.drawText(amount, { x: summaryLeft + 110, y: summaryTop - 63, size: 11, font: bold, color: pdfColor("#ffffff") });
+
+  const footer = safePdfText([invoice.business.website, invoice.business.email].filter(Boolean).join(" | "));
+  const footerWidth = font.widthOfTextAtSize(footer, 9);
+  page.drawText(footer, {
+    x: Math.max(left, (width - footerWidth) / 2),
+    y: 34,
+    size: 9,
+    font,
+    color: pdfColor("#52607f")
+  });
+
+  return Buffer.from(await pdfDoc.save());
 }
 
 export async function generateInvoicePdf(invoice: InvoicePdfData) {
