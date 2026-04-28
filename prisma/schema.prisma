@@ -1,0 +1,94 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String           @id @default(cuid())
+  email           String           @unique
+  password        String
+  createdAt       DateTime         @default(now())
+  businessProfile BusinessProfile?
+  customers       Customer[]
+  botFiles        BotFile[]
+  invoices        Invoice[]
+}
+
+model BusinessProfile {
+  id           String @id @default(cuid())
+  user         User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId       String @unique
+  businessName String
+  logoPath     String?
+  signaturePath String?
+  signatureName String?
+  website      String?
+  email        String?
+  address      String?
+  smtpHost     String?
+  smtpPort     Int?
+  smtpUser     String?
+  smtpPass     String?
+  smtpFromName String?
+}
+
+model Customer {
+  id       String    @id @default(cuid())
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId   String
+  name     String
+  email    String
+  phone    String?
+  address  String?
+  city     String?
+  state    String?
+  country  String?
+  pincode  String?
+  createdAt DateTime  @default(now())
+  invoices Invoice[]
+
+  @@index([userId])
+}
+
+model BotFile {
+  id         String    @id @default(cuid())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  fileName   String
+  filePath   String
+  fileSize   Int?
+  uploadedAt DateTime  @default(now())
+  invoices   Invoice[]
+
+  @@index([userId])
+}
+
+model Invoice {
+  id            String    @id @default(cuid())
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String
+  invoiceNumber String
+  date          DateTime  @default(now())
+  customer      Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customerId    String
+  productName   String
+  services      String?
+  validity      String?
+  amount        Float
+  currency      String    @default("USD")
+  status        String    @default("paid")
+  botFile       BotFile?  @relation(fields: [botFileId], references: [id], onDelete: SetNull)
+  botFileId     String?
+  signaturePath String?
+  signatureName String?
+  sentAt        DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@unique([userId, invoiceNumber])
+  @@index([userId])
+  @@index([customerId])
+}
