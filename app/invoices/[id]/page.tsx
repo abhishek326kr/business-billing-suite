@@ -12,15 +12,16 @@ export const dynamic = "force-dynamic";
 export default async function InvoiceDetailPage({
   params
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
+  const { id } = await params;
   const userId = await getCurrentUserId();
   if (!userId) {
     redirect("/login");
   }
 
   const [invoice, profile] = await Promise.all([
-    getInvoiceById(params.id, userId),
+    getInvoiceById(id, userId),
     getBusinessProfile(userId)
   ]);
 

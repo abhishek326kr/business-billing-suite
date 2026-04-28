@@ -8,15 +8,16 @@ export const runtime = "nodejs";
 
 export async function GET(
   _request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   const userId = await getCurrentUserId();
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
   const [invoice, profile] = await Promise.all([
-    getInvoiceById(params.id, userId),
+    getInvoiceById(id, userId),
     getBusinessProfile(userId)
   ]);
 

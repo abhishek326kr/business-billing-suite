@@ -11,9 +11,10 @@ export const runtime = "nodejs";
 
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const userId = await getCurrentUserId();
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
@@ -21,7 +22,7 @@ export async function POST(
 
     const body = await request.json();
     const [invoice, profile] = await Promise.all([
-      getInvoiceById(params.id, userId),
+      getInvoiceById(id, userId),
       getBusinessProfile(userId)
     ]);
 
@@ -29,7 +30,7 @@ export async function POST(
       return NextResponse.json({ error: "Invoice not found." }, { status: 404 });
     }
 
-    assertRateLimit(`invoice-email:${params.id}`);
+    assertRateLimit(`invoice-email:${id}`);
 
     const pdf = await generateInvoicePdf({
       invoiceNumber: invoice.invoiceNumber,
