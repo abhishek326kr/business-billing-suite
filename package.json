@@ -3,17 +3,21 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "npm run uploads:init",
     "dev": "next dev",
     "build": "next build",
     "postinstall": "prisma generate",
+    "prestart": "npm run uploads:init",
     "start": "next start",
     "lint": "next lint",
+    "uploads:init": "node scripts/ensure-upload-dir.mjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1038.0",
     "@prisma/client": "^5.13.0",
     "bcryptjs": "^2.4.3",
     "clsx": "^2.1.1",
@@ -29,8 +33,8 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@types/node": "^20.12.12",
     "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^20.12.12",
     "@types/nodemailer": "^6.4.15",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",

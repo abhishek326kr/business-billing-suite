@@ -4,6 +4,7 @@ import path from "path";
 import puppeteer from "puppeteer";
 import { pathToFileURL } from "url";
 
+import { getUploadedFilePath, getUploadedPublicUrl, isR2StorageConfigured } from "@/lib/uploads";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 type InvoicePdfData = {
@@ -48,6 +49,20 @@ function escapeHtml(value: string) {
 function getPublicAssetUrl(assetPath: string) {
   if (/^(data:|https?:\/\/)/.test(assetPath)) {
     return assetPath;
+  }
+
+  if (assetPath.startsWith("/uploads/")) {
+    const publicUrl = getUploadedPublicUrl(assetPath);
+
+    if (publicUrl) {
+      return publicUrl;
+    }
+
+    if (isR2StorageConfigured() && process.env.NEXTAUTH_URL) {
+      return new URL(assetPath, process.env.NEXTAUTH_URL).href;
+    }
+
+    return pathToFileURL(getUploadedFilePath(assetPath)).href;
   }
 
   return pathToFileURL(

@@ -1,8 +1,8 @@
-import fs from "fs/promises";
 import path from "path";
 import nodemailer from "nodemailer";
 
 import { decryptValue } from "@/lib/crypto";
+import { readUploadedFile as readStoredUploadedFile } from "@/lib/uploads";
 
 type MailerConfig = {
   smtpHost?: string | null;
@@ -61,7 +61,7 @@ export async function sendInvoiceEmail({
   if (botFilePath) {
     attachments.push({
       filename: botFileName || path.basename(botFilePath),
-      path: path.join(process.cwd(), "public", botFilePath.replace(/^\/+/, ""))
+      content: await readStoredUploadedFile(botFilePath)
     });
   }
 
@@ -94,6 +94,5 @@ export async function sendInvoiceEmail({
 }
 
 export async function readUploadedFile(relativePath: string) {
-  const filePath = path.join(process.cwd(), "public", relativePath.replace(/^\/+/, ""));
-  return fs.readFile(filePath);
+  return readStoredUploadedFile(relativePath);
 }
