@@ -24,6 +24,8 @@ export async function POST(
     const to = body.to?.toString() || "";
     const subject = body.subject?.toString() || "";
     const message = body.message?.toString() || "";
+    const licenseKey = body.licenseKey?.toString() || "";
+    const endpointUrl = body.endpointUrl?.toString() || "";
     const [invoice, profile] = await Promise.all([
       getInvoiceById(id, userId),
       getBusinessProfile(userId)
@@ -58,11 +60,14 @@ export async function POST(
         smtpPass: profile.smtpPass,
         smtpFromName: profile.smtpFromName,
         businessEmail: profile.email,
-        businessName: profile.businessName
+        businessName: profile.businessName,
+        logoPath: profile.logoPath
       },
       to,
       subject,
       message,
+      licenseKey,
+      endpointUrl,
       invoicePdf: pdf,
       invoiceNumber: invoice.invoiceNumber,
       invoiceDate: invoice.date,

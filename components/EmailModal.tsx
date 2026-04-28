@@ -34,6 +34,8 @@ export function EmailModal({
         body: JSON.stringify({
           to: formData.get("to"),
           subject: formData.get("subject"),
+          licenseKey: formData.get("licenseKey"),
+          endpointUrl: formData.get("endpointUrl"),
           message: formData.get("message")
         })
       });
@@ -68,6 +70,16 @@ export function EmailModal({
               <div>
                 <Label htmlFor="subject">Subject</Label>
                 <Input id="subject" name="subject" defaultValue={initialSubject} required />
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <Label htmlFor="licenseKey">License Key</Label>
+                  <Input id="licenseKey" name="licenseKey" placeholder="XXXX-XXXX-XXXX-XXXX" />
+                </div>
+                <div>
+                  <Label htmlFor="endpointUrl">Endpoint URL</Label>
+                  <Input id="endpointUrl" name="endpointUrl" type="url" placeholder="https://..." />
+                </div>
               </div>
               <div>
                 <Label htmlFor="message">Message</Label>

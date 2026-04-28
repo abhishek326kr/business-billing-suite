@@ -1,8 +1,13 @@
 import path from "path";
 import nodemailer from "nodemailer";
+import type Mail from "nodemailer/lib/mailer";
 
 import { decryptValue } from "@/lib/crypto";
-import { readUploadedFile as readStoredUploadedFile } from "@/lib/uploads";
+import {
+  getUploadedFile,
+  getUploadedPublicUrl,
+  readUploadedFile as readStoredUploadedFile
+} from "@/lib/uploads";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 type MailerConfig = {
@@ -13,6 +18,7 @@ type MailerConfig = {
   smtpFromName?: string | null;
   businessEmail?: string | null;
   businessName: string;
+  logoPath?: string | null;
 };
 
 type SendInvoiceEmailOptions = {
@@ -20,6 +26,8 @@ type SendInvoiceEmailOptions = {
   to: string;
   subject: string;
   message: string;
+  licenseKey?: string;
+  endpointUrl?: string;
   invoicePdf: Buffer;
   invoiceNumber?: string;
   invoiceDate?: Date | string;
@@ -48,11 +56,92 @@ function safeAttachmentName(value?: string) {
   return `${value || "invoice"}`.replace(/[^a-zA-Z0-9._-]+/g, "_");
 }
 
+function getContentTypeFromPath(filePath: string) {
+  const extension = path.extname(filePath).toLowerCase();
+
+  if (extension === ".png") return "image/png";
+  if (extension === ".jpg" || extension === ".jpeg") return "image/jpeg";
+  if (extension === ".webp") return "image/webp";
+  if (extension === ".gif") return "image/gif";
+  if (extension === ".zip") return "application/zip";
+  if (extension === ".pdf") return "application/pdf";
+
+  return "application/octet-stream";
+}
+
+function normalizeEndpointUrl(endpointUrl?: string) {
+  const trimmed = endpointUrl?.trim() || "";
+
+  if (!trimmed) {
+    return "";
+  }
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+
+  return `https://${trimmed}`;
+}
+
+function getMaxAttachmentBytes() {
+  const configured = Number(process.env.EMAIL_MAX_ATTACHMENT_MB || 22);
+  return Math.max(1, configured) * 1024 * 1024;
+}
+
+function formatBytes(bytes: number) {
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+async function getEmailLogo(logoPath?: string | null) {
+  if (!logoPath) {
+    return null;
+  }
+
+  const publicUrl =
+    getUploadedPublicUrl(logoPath) ||
+    (logoPath.startsWith("/uploads/") && process.env.NEXTAUTH_URL
+      ? new URL(logoPath, process.env.NEXTAUTH_URL).href
+      : /^https?:\/\//i.test(logoPath)
+        ? logoPath
+        : null);
+
+  if (publicUrl) {
+    return {
+      src: publicUrl,
+      attachment: null
+    };
+  }
+
+  if (!logoPath.startsWith("/uploads/")) {
+    return null;
+  }
+
+  try {
+    const uploaded = await getUploadedFile(logoPath);
+
+    return {
+      src: "cid:business-logo",
+      attachment: {
+        filename: path.basename(logoPath),
+        content: uploaded.buffer,
+        contentType: uploaded.contentType || getContentTypeFromPath(logoPath),
+        cid: "business-logo",
+        contentDisposition: "inline" as const
+      }
+    };
+  } catch (error) {
+    console.warn(`Unable to attach email logo: ${logoPath}`, error);
+    return null;
+  }
+}
+
 export async function sendInvoiceEmail({
   config,
   to,
   subject,
   message,
+  licenseKey,
+  endpointUrl,
   invoicePdf,
   invoiceNumber,
   invoiceDate,
@@ -83,27 +172,47 @@ export async function sendInvoiceEmail({
     }
   });
 
-  const attachments: {
-    filename: string;
-    content?: Buffer;
-    path?: string;
-  }[] = [
+  const attachments: Mail.Attachment[] = [
     {
       filename: `${safeAttachmentName(invoiceNumber)}.pdf`,
       content: invoicePdf
     }
   ];
 
+  let totalAttachmentBytes = invoicePdf.byteLength;
+
   if (botFilePath) {
+    const botFileContent = await readStoredUploadedFile(botFilePath);
+    totalAttachmentBytes += botFileContent.byteLength;
     attachments.push({
       filename: botFileName || path.basename(botFilePath),
-      content: await readStoredUploadedFile(botFilePath)
+      content: botFileContent,
+      contentType: getContentTypeFromPath(botFileName || botFilePath)
     });
+  }
+
+  const logo = await getEmailLogo(config.logoPath);
+
+  if (logo?.attachment) {
+    attachments.push(logo.attachment);
+
+    if (Buffer.isBuffer(logo.attachment.content)) {
+      totalAttachmentBytes += logo.attachment.content.byteLength;
+    }
+  }
+
+  const maxAttachmentBytes = getMaxAttachmentBytes();
+
+  if (totalAttachmentBytes > maxAttachmentBytes) {
+    throw new Error(
+      `Email attachments are ${formatBytes(totalAttachmentBytes)}, which is above the configured ${formatBytes(maxAttachmentBytes)} SMTP-safe limit. Reduce the ZIP size or raise EMAIL_MAX_ATTACHMENT_MB if your provider supports it.`
+    );
   }
 
   const from = config.smtpFromName
     ? `"${config.smtpFromName}" <${config.businessEmail || config.smtpUser}>`
     : config.businessEmail || config.smtpUser;
+
   const safeBusinessName = escapeHtml(config.businessName);
   const safeCustomerName = customerName ? escapeHtml(customerName) : "there";
   const safeInvoiceNumber = escapeHtml(invoiceNumber || "Invoice");
@@ -114,7 +223,38 @@ export async function sendInvoiceEmail({
       : "Attached";
   const safeBusinessEmail = config.businessEmail ? escapeHtml(config.businessEmail) : "";
   const safeBotFileName = botFileName ? escapeHtml(botFileName) : "";
+  const safeLicenseKey = licenseKey?.trim() ? escapeHtml(licenseKey.trim()) : "";
+  const normalizedEndpointUrl = normalizeEndpointUrl(endpointUrl);
+  const safeEndpointUrl = normalizedEndpointUrl ? escapeHtml(normalizedEndpointUrl) : "";
   const attachmentCount = botFileName ? "2 attachments" : "1 attachment";
+  const logoMarkup = logo?.src
+    ? `<img src="${escapeHtml(logo.src)}" width="56" height="56" alt="${safeBusinessName}" style="display:block;width:56px;height:56px;border-radius:14px;object-fit:cover;border:1px solid rgba(255,255,255,0.32);" />`
+    : `<div style="width:56px;height:56px;border-radius:14px;background:#dfe9ff;color:#0f2460;font-size:22px;line-height:56px;text-align:center;font-weight:700;">${safeBusinessName.slice(0, 1).toUpperCase()}</div>`;
+  const accessRows =
+    safeLicenseKey || safeEndpointUrl
+      ? `
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:1px solid #c9d6f0;margin:0 0 22px;background:#ffffff;">
+                      <tr>
+                        <td colspan="2" style="padding:13px 14px;background:#0f2460;color:#ffffff;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;">Access details</td>
+                      </tr>
+                      ${
+                        safeLicenseKey
+                          ? `<tr>
+                        <td style="padding:12px 14px;color:#5c6885;font-size:13px;border-top:1px solid #dbe4f3;">License key</td>
+                        <td align="right" style="padding:12px 14px;color:#12203f;font-size:13px;border-top:1px solid #dbe4f3;font-family:Consolas,Monaco,monospace;">${safeLicenseKey}</td>
+                      </tr>`
+                          : ""
+                      }
+                      ${
+                        safeEndpointUrl
+                          ? `<tr>
+                        <td style="padding:12px 14px;color:#5c6885;font-size:13px;border-top:1px solid #dbe4f3;">Endpoint URL</td>
+                        <td align="right" style="padding:12px 14px;color:#12203f;font-size:13px;border-top:1px solid #dbe4f3;"><a href="${safeEndpointUrl}" style="color:#0f4fb8;text-decoration:none;">${safeEndpointUrl}</a></td>
+                      </tr>`
+                          : ""
+                      }
+                    </table>`
+      : "";
 
   const html = `
     <!doctype html>
@@ -131,12 +271,19 @@ export async function sendInvoiceEmail({
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;background:#eef3fb;">
           <tr>
             <td align="center" style="padding:32px 16px;">
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;border-collapse:collapse;background:#ffffff;border:1px solid #d8e0f1;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:680px;border-collapse:collapse;background:#ffffff;border:1px solid #d8e0f1;">
                 <tr>
-                  <td style="background:#0f2460;padding:24px 28px;color:#ffffff;">
-                    <div style="font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#dfe9ff;font-weight:700;">Invoice</div>
-                    <div style="font-size:24px;line-height:1.25;font-weight:700;margin-top:8px;">${safeBusinessName}</div>
-                    ${safeBusinessEmail ? `<div style="font-size:13px;line-height:1.6;color:#dfe9ff;margin-top:6px;">${safeBusinessEmail}</div>` : ""}
+                  <td style="background:#0f2460;padding:26px 28px;color:#ffffff;">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
+                      <tr>
+                        <td width="68" valign="middle">${logoMarkup}</td>
+                        <td valign="middle">
+                          <div style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#dfe9ff;font-weight:700;">Invoice delivery</div>
+                          <div style="font-size:25px;line-height:1.25;font-weight:700;margin-top:7px;">${safeBusinessName}</div>
+                          ${safeBusinessEmail ? `<div style="font-size:13px;line-height:1.6;color:#dfe9ff;margin-top:5px;">${safeBusinessEmail}</div>` : ""}
+                        </td>
+                      </tr>
+                    </table>
                   </td>
                 </tr>
                 <tr>
@@ -158,6 +305,8 @@ export async function sendInvoiceEmail({
                         <td align="right" style="padding:12px 14px;border-top:1px solid #dbe4f3;color:#12203f;font-size:15px;font-weight:700;">${safeInvoiceAmount}</td>
                       </tr>
                     </table>
+
+                    ${accessRows}
 
                     <div style="border-left:4px solid #3d61c5;background:#f8fbff;padding:14px 16px;margin:0 0 22px;color:#33415f;font-size:14px;line-height:1.6;">
                       Attached: invoice PDF${safeBotFileName ? ` and ${safeBotFileName}` : ""}.
