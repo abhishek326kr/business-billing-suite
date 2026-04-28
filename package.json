@@ -10,6 +10,7 @@
     "start": "node scripts/start-production.mjs",
     "lint": "next lint",
     "build:ensure": "node scripts/ensure-production-build.mjs",
+    "puppeteer:deps": "bash scripts/install-puppeteer-deps.sh",
     "uploads:init": "node scripts/ensure-upload-dir.mjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",

@@ -45,6 +45,12 @@ npm run prisma:migrate:deploy
 
 `npm start` runs `uploads:init` and checks for `.next/BUILD_ID`; if the production build is missing it runs `npm run build` automatically before starting Next.
 
+Puppeteer PDF generation needs Chrome shared libraries on Linux servers. On Debian/Ubuntu, install them once with:
+
+```bash
+npm run puppeteer:deps
+```
+
 ## Notes
 
 - Uploaded files use Cloudflare R2 when `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, and `R2_PUBLIC_URL` are set.
