@@ -6,6 +6,7 @@ import puppeteer from "puppeteer";
 import { pathToFileURL } from "url";
 
 import { getUploadedFilePath, getUploadedPublicUrl, isR2StorageConfigured } from "@/lib/uploads";
+import { getUploadedFile } from "@/lib/uploads";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 type InvoicePdfData = {
@@ -297,6 +298,70 @@ function drawPdfTextBlock({
   return currentY;
 }
 
+async function getPdfImageBytes(assetPath?: string | null) {
+  if (!assetPath) {
+    return null;
+  }
+
+  try {
+    if (assetPath.startsWith("/uploads/")) {
+      const uploaded = await getUploadedFile(assetPath);
+      return {
+        bytes: uploaded.buffer,
+        contentType: uploaded.contentType || ""
+      };
+    }
+
+    if (/^https?:\/\//.test(assetPath)) {
+      const response = await fetch(assetPath);
+
+      if (!response.ok) {
+        return null;
+      }
+
+      return {
+        bytes: Buffer.from(await response.arrayBuffer()),
+        contentType: response.headers.get("content-type") || ""
+      };
+    }
+
+    return null;
+  } catch (error) {
+    console.warn(`Unable to load PDF image asset: ${assetPath}`, error);
+    return null;
+  }
+}
+
+async function embedPdfImage(pdfDoc: PDFDocument, assetPath?: string | null) {
+  const image = await getPdfImageBytes(assetPath);
+
+  if (!image) {
+    return null;
+  }
+
+  const contentType = image.contentType.toLowerCase();
+  const isPng = contentType.includes("png") || assetPath?.toLowerCase().endsWith(".png");
+  const isJpg =
+    contentType.includes("jpeg") ||
+    contentType.includes("jpg") ||
+    assetPath?.toLowerCase().endsWith(".jpg") ||
+    assetPath?.toLowerCase().endsWith(".jpeg");
+
+  try {
+    if (isPng) {
+      return await pdfDoc.embedPng(image.bytes);
+    }
+
+    if (isJpg) {
+      return await pdfDoc.embedJpg(image.bytes);
+    }
+  } catch (error) {
+    console.warn(`Unable to embed PDF image asset: ${assetPath}`, error);
+  }
+
+  return null;
+}
+
 async function generateFallbackInvoicePdf(invoice: InvoicePdfData) {
   const pdfDoc = await PDFDocument.create();
   const page = pdfDoc.addPage([595.28, 841.89]);
@@ -311,26 +376,50 @@ async function generateFallbackInvoicePdf(invoice: InvoicePdfData) {
   const amount = formatPdfCurrency(invoice.amount, invoice.currency);
   const customerAddress = getCustomerAddress(invoice) || "Address not provided";
   const isPaid = invoice.status.toLowerCase() === "paid";
+  const logoImage = await embedPdfImage(pdfDoc, invoice.business.logoPath);
+  const signatureImage = await embedPdfImage(pdfDoc, invoice.signaturePath);
 
   page.drawRectangle({ x: 0, y: height - 28, width, height: 28, color: pdfColor("#0f2460") });
   page.drawRectangle({ x: 0, y: height - 31, width, height: 3, color: pdfColor("#3d61c5") });
 
+  if (logoImage) {
+    const logoSize = 56;
+    const scaledLogo = logoImage.scaleToFit(logoSize, logoSize);
+    page.drawImage(logoImage, {
+      x: left,
+      y: 732,
+      width: scaledLogo.width,
+      height: scaledLogo.height
+    });
+  } else {
+    page.drawRectangle({
+      x: left,
+      y: 732,
+      width: 56,
+      height: 56,
+      borderWidth: 1,
+      borderColor: pdfColor("#d4ddf0"),
+      color: pdfColor("#eff4ff")
+    });
+  }
+
+  const brandLeft = left + 72;
   page.drawText(safePdfText(invoice.business.businessName) || "Business", {
-    x: left,
+    x: brandLeft,
     y: 758,
     size: 24,
     font: bold,
     color: pdfColor("#0f2460")
   });
   page.drawText(safePdfText(invoice.business.website || "Website not set"), {
-    x: left,
+    x: brandLeft,
     y: 736,
     size: 10,
     font,
     color: pdfColor("#52607f")
   });
   page.drawText(safePdfText(invoice.business.email || "Email not set"), {
-    x: left,
+    x: brandLeft,
     y: 720,
     size: 10,
     font,
@@ -437,13 +526,24 @@ async function generateFallbackInvoicePdf(invoice: InvoicePdfData) {
     borderColor: pdfColor("#cbd7ef"),
     color: pdfColor("#f8fbff")
   });
-  page.drawText(safePdfText(invoice.signatureName || "Authorized signature"), {
-    x: rightColumn + 18,
-    y: 555,
-    size: 14,
-    font: italic,
-    color: pdfColor("#0f2460")
-  });
+
+  if (signatureImage) {
+    const scaledSignature = signatureImage.scaleToFit(166, 42);
+    page.drawImage(signatureImage, {
+      x: rightColumn + (190 - scaledSignature.width) / 2,
+      y: 540 + (42 - scaledSignature.height) / 2,
+      width: scaledSignature.width,
+      height: scaledSignature.height
+    });
+  } else {
+    page.drawText(safePdfText(invoice.signatureName || "Authorized signature"), {
+      x: rightColumn + 18,
+      y: 555,
+      size: 14,
+      font: italic,
+      color: pdfColor("#0f2460")
+    });
+  }
 
   const tableTop = 465;
   page.drawRectangle({ x: left, y: tableTop, width: contentWidth, height: 30, color: pdfColor("#0f2460") });

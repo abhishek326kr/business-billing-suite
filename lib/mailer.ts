@@ -70,6 +70,13 @@ export async function sendInvoiceEmail({
     host: config.smtpHost,
     port: config.smtpPort,
     secure: config.smtpPort === 465,
+    requireTLS: config.smtpPort === 587,
+    connectionTimeout: 30_000,
+    greetingTimeout: 30_000,
+    socketTimeout: 60_000,
+    tls: {
+      servername: config.smtpHost
+    },
     auth: {
       user: config.smtpUser,
       pass: decryptValue(config.smtpPass)
@@ -174,13 +181,26 @@ export async function sendInvoiceEmail({
     </html>
   `;
 
-  await transporter.sendMail({
-    from,
-    to,
-    subject,
-    html,
-    attachments
-  });
+  try {
+    await transporter.verify();
+    await transporter.sendMail({
+      from,
+      to,
+      subject,
+      html,
+      attachments
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown SMTP error.";
+
+    if (/ECONNRESET|socket hang up|connection/i.test(message)) {
+      throw new Error(
+        `SMTP connection failed (${message}). Check SMTP host, port, SSL/TLS mode, and whether your provider allows SMTP from this server.`
+      );
+    }
+
+    throw error;
+  }
 }
 
 export async function readUploadedFile(relativePath: string) {
