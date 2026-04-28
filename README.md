@@ -1,6 +1,6 @@
 # Invoice Management Web App
 
-Next.js 14 invoice management app with App Router, Prisma/SQLite, NextAuth credentials login, Puppeteer PDF generation, SMTP email delivery, file uploads, and a fintech-style admin UI.
+Next.js 14 invoice management app with App Router, Prisma/PostgreSQL, NextAuth credentials login, Puppeteer PDF generation, SMTP email delivery, file uploads, and a fintech-style admin UI.
 
 ## Setup
 
@@ -21,7 +21,7 @@ npm run dev
 ## Environment Variables
 
 ```env
-DATABASE_URL="file:./dev.db"
+DATABASE_URL="postgresql://USER:PASSWORD@HOST:PORT/DATABASE?schema=public"
 NEXTAUTH_SECRET=
 NEXTAUTH_URL=http://localhost:3000
 APP_ENCRYPTION_KEY=
@@ -29,10 +29,18 @@ OWNER_EMAIL=
 OWNER_PASSWORD=
 ```
 
+## Deployment
+
+Set `DATABASE_URL` in the deployment environment to your PostgreSQL connection string, then run migrations with:
+
+```bash
+npm run prisma:migrate:deploy
+```
+
 ## Notes
 
 - Uploaded files are stored under `public/uploads`.
-- The default local database is SQLite at `prisma/dev.db` via `DATABASE_URL="file:./dev.db"`.
+- The app uses PostgreSQL through Prisma. `DATABASE_URL` must start with `postgresql://` or `postgres://`.
 - SMTP passwords are encrypted before storing in the database.
 - Email sending is rate-limited in-memory per invoice route.
 - Invoice numbers follow `INV-YYYYMMDD-0001` and increment per day.
