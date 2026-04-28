@@ -58,20 +58,28 @@ export function InvoiceTemplate({
           background: #ffffff;
           color: #12203f;
           font-family: Arial, Helvetica, sans-serif;
-          max-width: 920px;
+          width: 100%;
+          max-width: 210mm;
+          min-height: 297mm;
           margin: 0 auto;
           border: 1px solid #dbe4f3;
           box-shadow: 0 14px 34px rgba(15, 36, 96, 0.08);
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
         }
         .bar { height: 7mm; background: ${primary}; }
         .accent-line { height: 2px; background: #3d61c5; }
-        .invoice-body { padding: 32px; }
+        .invoice-body {
+          flex: 1;
+          padding: 12mm 14mm 8mm;
+        }
         .row { display: flex; justify-content: space-between; gap: 24px; }
         .brand { display: flex; gap: 16px; align-items: center; }
         .logo {
-          width: 64px;
-          height: 64px;
-          border-radius: 16px;
+          width: 20mm;
+          height: 20mm;
+          border-radius: 6px;
           border: 1px solid #d4ddf0;
           object-fit: cover;
           background: #eff4ff;
@@ -157,10 +165,17 @@ export function InvoiceTemplate({
           font-weight: 700;
         }
         .footer {
-          padding: 22px 32px 28px;
+          padding: 0 14mm 9mm;
           text-align: center;
           font-size: 13px;
           color: #52607f;
+        }
+        @media (max-width: 720px) {
+          .invoice-body { padding: 24px; }
+          .row { flex-direction: column; }
+          .headline, .subhead { text-align: left; }
+          .summary { width: 100%; }
+          .footer { padding: 0 24px 24px; }
         }
       `}</style>
 

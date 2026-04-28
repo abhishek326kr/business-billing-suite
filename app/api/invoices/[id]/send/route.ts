@@ -21,6 +21,9 @@ export async function POST(
     }
 
     const body = await request.json();
+    const to = body.to?.toString() || "";
+    const subject = body.subject?.toString() || "";
+    const message = body.message?.toString() || "";
     const [invoice, profile] = await Promise.all([
       getInvoiceById(id, userId),
       getBusinessProfile(userId)
@@ -57,10 +60,15 @@ export async function POST(
         businessEmail: profile.email,
         businessName: profile.businessName
       },
-      to: body.to,
-      subject: body.subject,
-      message: body.message,
+      to,
+      subject,
+      message,
       invoicePdf: pdf,
+      invoiceNumber: invoice.invoiceNumber,
+      invoiceDate: invoice.date,
+      invoiceAmount: invoice.amount,
+      invoiceCurrency: invoice.currency,
+      customerName: invoice.customer.name,
       botFilePath: invoice.botFile?.filePath,
       botFileName: invoice.botFile?.fileName
     });

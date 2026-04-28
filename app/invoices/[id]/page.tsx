@@ -53,7 +53,7 @@ export default async function InvoiceDetailPage({
         <EmailModal
           invoiceId={invoice.id}
           initialTo={invoice.customer.email}
-          initialSubject={`Invoice #${invoice.invoiceNumber} from Algo Trading Bot`}
+          initialSubject={`Invoice #${invoice.invoiceNumber} from ${profile.businessName}`}
           botFileName={invoice.botFile?.fileName}
         />
         <Link href="/invoices">
