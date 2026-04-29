@@ -9,6 +9,7 @@ import {
   FileText,
   LayoutDashboard,
   LogOut,
+  Mail,
   Menu,
   ReceiptIndianRupee,
   Users,
@@ -23,6 +24,7 @@ const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/profile", label: "Profile", icon: Building2 },
   { href: "/customers", label: "Customers", icon: Users },
+  { href: "/emails", label: "Emails", icon: Mail },
   { href: "/files", label: "Files", icon: Files },
   { href: "/invoices", label: "Invoices", icon: FileText }
 ];

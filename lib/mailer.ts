@@ -18,6 +18,7 @@ type MailerConfig = {
   smtpFromName?: string | null;
   businessEmail?: string | null;
   businessName: string;
+  businessWebsite?: string | null;
   logoPath?: string | null;
 };
 
@@ -38,6 +39,20 @@ type SendInvoiceEmailOptions = {
   botFileName?: string | null;
 };
 
+type CustomerEmailAttachment = {
+  fileName: string;
+  filePath: string;
+};
+
+type SendCustomerEmailOptions = {
+  config: MailerConfig;
+  to: string;
+  subject: string;
+  message: string;
+  customerName?: string;
+  attachments?: CustomerEmailAttachment[];
+};
+
 function escapeHtml(value: string) {
   return value
     .replaceAll("&", "&amp;")
@@ -47,8 +62,8 @@ function escapeHtml(value: string) {
     .replaceAll("'", "&#39;");
 }
 
-function formatEmailMessage(message: string) {
-  const trimmed = message.trim() || "Please find your invoice attached.";
+function formatEmailMessage(message: string, fallback = "Please find your invoice attached.") {
+  const trimmed = message.trim() || fallback;
   return escapeHtml(trimmed).replace(/\r?\n/g, "<br />");
 }
 
@@ -135,6 +150,39 @@ async function getEmailLogo(logoPath?: string | null) {
   }
 }
 
+function createTransporter(config: MailerConfig) {
+  if (!config.smtpHost || !config.smtpPort || !config.smtpUser || !config.smtpPass) {
+    throw new Error("SMTP settings are incomplete.");
+  }
+
+  return nodemailer.createTransport({
+    host: config.smtpHost,
+    port: config.smtpPort,
+    secure: config.smtpPort === 465,
+    requireTLS: config.smtpPort === 587,
+    connectionTimeout: 30_000,
+    greetingTimeout: 30_000,
+    socketTimeout: 60_000,
+    tls: {
+      servername: config.smtpHost
+    },
+    auth: {
+      user: config.smtpUser,
+      pass: decryptValue(config.smtpPass)
+    }
+  });
+}
+
+function getFromAddress(config: MailerConfig) {
+  const address = config.businessEmail || config.smtpUser;
+
+  if (!address) {
+    return undefined;
+  }
+
+  return config.smtpFromName ? `"${config.smtpFromName}" <${address}>` : address;
+}
+
 export async function sendInvoiceEmail({
   config,
   to,
@@ -151,26 +199,7 @@ export async function sendInvoiceEmail({
   botFilePath,
   botFileName
 }: SendInvoiceEmailOptions) {
-  if (!config.smtpHost || !config.smtpPort || !config.smtpUser || !config.smtpPass) {
-    throw new Error("SMTP settings are incomplete.");
-  }
-
-  const transporter = nodemailer.createTransport({
-    host: config.smtpHost,
-    port: config.smtpPort,
-    secure: config.smtpPort === 465,
-    requireTLS: config.smtpPort === 587,
-    connectionTimeout: 30_000,
-    greetingTimeout: 30_000,
-    socketTimeout: 60_000,
-    tls: {
-      servername: config.smtpHost
-    },
-    auth: {
-      user: config.smtpUser,
-      pass: decryptValue(config.smtpPass)
-    }
-  });
+  const transporter = createTransporter(config);
 
   const attachments: Mail.Attachment[] = [
     {
@@ -209,9 +238,7 @@ export async function sendInvoiceEmail({
     );
   }
 
-  const from = config.smtpFromName
-    ? `"${config.smtpFromName}" <${config.businessEmail || config.smtpUser}>`
-    : config.businessEmail || config.smtpUser;
+  const from = getFromAddress(config);
 
   const safeBusinessName = escapeHtml(config.businessName);
   const safeCustomerName = customerName ? escapeHtml(customerName) : "there";
@@ -336,6 +363,163 @@ export async function sendInvoiceEmail({
       from,
       to,
       subject,
+      html,
+      attachments
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown SMTP error.";
+
+    if (/ECONNRESET|socket hang up|connection/i.test(message)) {
+      throw new Error(
+        `SMTP connection failed (${message}). Check SMTP host, port, SSL/TLS mode, and whether your provider allows SMTP from this server.`
+      );
+    }
+
+    throw error;
+  }
+}
+
+export async function sendCustomerEmail({
+  config,
+  to,
+  subject,
+  message,
+  customerName,
+  attachments: selectedAttachments = []
+}: SendCustomerEmailOptions) {
+  const transporter = createTransporter(config);
+  const attachments: Mail.Attachment[] = [];
+  let totalAttachmentBytes = 0;
+
+  for (const attachment of selectedAttachments) {
+    const content = await readStoredUploadedFile(attachment.filePath);
+    totalAttachmentBytes += content.byteLength;
+    attachments.push({
+      filename: attachment.fileName || path.basename(attachment.filePath),
+      content,
+      contentType: getContentTypeFromPath(attachment.fileName || attachment.filePath)
+    });
+  }
+
+  const logo = await getEmailLogo(config.logoPath);
+
+  if (logo?.attachment) {
+    attachments.push(logo.attachment);
+
+    if (Buffer.isBuffer(logo.attachment.content)) {
+      totalAttachmentBytes += logo.attachment.content.byteLength;
+    }
+  }
+
+  const maxAttachmentBytes = getMaxAttachmentBytes();
+
+  if (totalAttachmentBytes > maxAttachmentBytes) {
+    throw new Error(
+      `Email attachments are ${formatBytes(totalAttachmentBytes)}, which is above the configured ${formatBytes(maxAttachmentBytes)} SMTP-safe limit. Remove some files or raise EMAIL_MAX_ATTACHMENT_MB if your provider supports it.`
+    );
+  }
+
+  const from = getFromAddress(config);
+  const safeBusinessName = escapeHtml(config.businessName);
+  const safeCustomerName = customerName ? escapeHtml(customerName) : "there";
+  const safeBusinessEmail = config.businessEmail ? escapeHtml(config.businessEmail) : "";
+  const safeBusinessWebsite = config.businessWebsite ? escapeHtml(config.businessWebsite) : "";
+  const safeSubject = escapeHtml(subject);
+  const logoMarkup = logo?.src
+    ? `<img src="${escapeHtml(logo.src)}" width="56" height="56" alt="${safeBusinessName}" style="display:block;width:56px;height:56px;border-radius:14px;object-fit:cover;border:1px solid rgba(255,255,255,0.32);" />`
+    : `<div style="width:56px;height:56px;border-radius:14px;background:#dfe9ff;color:#0f2460;font-size:22px;line-height:56px;text-align:center;font-weight:700;">${safeBusinessName.slice(0, 1).toUpperCase()}</div>`;
+  const attachmentList = selectedAttachments.length
+    ? `
+                    <div style="border-left:4px solid #3d61c5;background:#f8fbff;padding:14px 16px;margin:0 0 22px;color:#33415f;font-size:14px;line-height:1.6;">
+                      <div style="font-weight:700;color:#12203f;margin-bottom:8px;">Attached files</div>
+                      ${selectedAttachments
+                        .map(
+                          (attachment) =>
+                            `<div style="padding:4px 0;">${escapeHtml(attachment.fileName || path.basename(attachment.filePath))}</div>`
+                        )
+                        .join("")}
+                    </div>`
+    : "";
+  const contactLine = [safeBusinessWebsite, safeBusinessEmail]
+    .filter(Boolean)
+    .join(" | ");
+  const text = [
+    `Hi ${customerName || "there"},`,
+    "",
+    message.trim() || "We wanted to get in touch with an update.",
+    "",
+    selectedAttachments.length
+      ? `Attached files: ${selectedAttachments.map((attachment) => attachment.fileName).join(", ")}`
+      : "",
+    "",
+    `Sent by ${config.businessName}`
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const html = `
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>${safeSubject}</title>
+      </head>
+      <body style="margin:0;padding:0;background:#eef3fb;font-family:Arial,Helvetica,sans-serif;color:#12203f;">
+        <div style="display:none;max-height:0;overflow:hidden;color:transparent;opacity:0;">
+          ${safeSubject} from ${safeBusinessName}
+        </div>
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;background:#eef3fb;">
+          <tr>
+            <td align="center" style="padding:32px 16px;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:680px;border-collapse:collapse;background:#ffffff;border:1px solid #d8e0f1;">
+                <tr>
+                  <td style="background:#0f2460;padding:26px 28px;color:#ffffff;">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
+                      <tr>
+                        <td width="68" valign="middle">${logoMarkup}</td>
+                        <td valign="middle">
+                          <div style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#dfe9ff;font-weight:700;">Customer message</div>
+                          <div style="font-size:25px;line-height:1.25;font-weight:700;margin-top:7px;">${safeBusinessName}</div>
+                          ${contactLine ? `<div style="font-size:13px;line-height:1.6;color:#dfe9ff;margin-top:5px;">${contactLine}</div>` : ""}
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:28px;">
+                    <div style="font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#0f2460;font-weight:700;margin:0 0 12px;">${safeSubject}</div>
+                    <p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#33415f;">Hi ${safeCustomerName},</p>
+                    <p style="margin:0 0 22px;font-size:15px;line-height:1.7;color:#33415f;">${formatEmailMessage(message, "We wanted to get in touch with an update.")}</p>
+
+                    ${attachmentList}
+
+                    <p style="margin:0;color:#5c6885;font-size:13px;line-height:1.7;">
+                      You can reply to this email if anything needs to be adjusted.
+                    </p>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:18px 28px;background:#f8fbff;border-top:1px solid #dbe4f3;color:#5c6885;font-size:12px;line-height:1.6;text-align:center;">
+                    Sent by ${safeBusinessName}${contactLine ? ` | ${contactLine}` : ""}
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+    </html>
+  `;
+
+  try {
+    await transporter.verify();
+    await transporter.sendMail({
+      from,
+      to,
+      subject,
+      text,
       html,
       attachments
     });
