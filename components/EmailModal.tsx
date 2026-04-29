@@ -52,17 +52,19 @@ export function EmailModal({
 
   return (
     <>
-      <Button onClick={() => setOpen(true)}>Send Email</Button>
+      <Button className="w-full sm:w-auto" onClick={() => setOpen(true)}>
+        Send Email
+      </Button>
       {open ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
-          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-soft">
-            <div className="flex items-center justify-between border-b border-border px-6 py-4">
+          <div className="max-h-[calc(100vh-2rem)] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-soft">
+            <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-4 sm:px-6">
               <h3 className="text-lg font-semibold text-slate-900">Send Invoice</h3>
               <Button variant="ghost" onClick={() => setOpen(false)}>
                 Close
               </Button>
             </div>
-            <form action={submitEmail} className="space-y-4 p-6">
+            <form action={submitEmail} className="space-y-4 p-4 sm:p-6">
               <div>
                 <Label htmlFor="to">To</Label>
                 <Input id="to" name="to" defaultValue={initialTo} required />
@@ -89,15 +91,15 @@ export function EmailModal({
                   defaultValue="Please find your invoice attached. Let us know if you need anything else."
                 />
               </div>
-              <div className="rounded-xl bg-surface p-4 text-sm text-slate-600">
+              <div className="break-words rounded-xl bg-surface p-4 text-sm text-slate-600">
                 Attachments: Invoice PDF{botFileName ? `, ${botFileName}` : ""}
               </div>
               {message ? <p className="text-sm text-slate-600">{message}</p> : null}
-              <div className="flex gap-3">
-                <Button type="submit" disabled={pending}>
+              <div className="grid gap-3 sm:flex">
+                <Button type="submit" className="w-full sm:w-auto" disabled={pending}>
                   {pending ? "Sending..." : "Send"}
                 </Button>
-                <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => setOpen(false)}>
                   Cancel
                 </Button>
               </div>

@@ -34,9 +34,9 @@ export function FileUpload({ onUploaded }: { onUploaded: () => Promise<void> | v
   }
 
   return (
-    <form action={uploadFile} className="flex flex-col gap-3 md:flex-row md:items-center">
+    <form action={uploadFile} className="grid gap-3 md:flex md:items-center">
       <Input ref={inputRef} name="file" type="file" required />
-      <Button type="submit" disabled={pending}>
+      <Button type="submit" className="w-full md:w-auto" disabled={pending}>
         {pending ? "Uploading..." : "Upload File"}
       </Button>
       {message ? <p className="text-sm text-slate-500">{message}</p> : null}

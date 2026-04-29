@@ -75,7 +75,9 @@ export function InvoiceTemplate({
           padding: 12mm 14mm 8mm;
         }
         .row { display: flex; justify-content: space-between; gap: 24px; }
+        .row > div { min-width: 0; }
         .brand { display: flex; gap: 16px; align-items: center; }
+        .brand > div { min-width: 0; overflow-wrap: anywhere; }
         .logo {
           width: 20mm;
           height: 20mm;
@@ -145,6 +147,7 @@ export function InvoiceTemplate({
           border-bottom: 1px solid #dbe4f3;
           vertical-align: top;
           font-size: 14px;
+          overflow-wrap: anywhere;
         }
         tbody tr:nth-child(even) td { background: ${accent}; }
         .summary {
@@ -155,10 +158,12 @@ export function InvoiceTemplate({
         .summary-row {
           display: flex;
           justify-content: space-between;
+          gap: 16px;
           padding: 12px 16px;
           border-bottom: 1px solid #dbe4f3;
           background: #f8fbff;
         }
+        .summary-row span:last-child { text-align: right; }
         .summary-row.total {
           background: ${primary};
           color: #ffffff;
@@ -171,9 +176,33 @@ export function InvoiceTemplate({
           color: #52607f;
         }
         @media (max-width: 720px) {
+          .invoice-sheet { min-height: auto; }
           .invoice-body { padding: 24px; }
           .row { flex-direction: column; }
+          .brand { align-items: flex-start; }
+          .logo { width: 56px; height: 56px; }
+          .headline { font-size: 28px; }
           .headline, .subhead { text-align: left; }
+          table, thead, tbody, tr, td { display: block; }
+          thead { display: none; }
+          tbody td {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 12px 0;
+          }
+          tbody td::before {
+            color: ${primary};
+            content: "";
+            flex: 0 0 42%;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+          }
+          tbody td:nth-child(1)::before { content: "PRODUCT"; }
+          tbody td:nth-child(2)::before { content: "SERVICES"; }
+          tbody td:nth-child(3)::before { content: "VALIDITY"; }
+          tbody td:nth-child(4)::before { content: "AMOUNT"; }
           .summary { width: 100%; }
           .footer { padding: 0 24px 24px; }
         }

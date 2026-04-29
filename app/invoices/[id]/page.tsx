@@ -46,9 +46,9 @@ export default async function InvoiceDetailPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap gap-3">
-        <a href={`/api/invoices/${invoice.id}/pdf`} target="_blank">
-          <Button>Download PDF</Button>
+      <div className="grid gap-3 sm:flex sm:flex-wrap">
+        <a href={`/api/invoices/${invoice.id}/pdf`} target="_blank" className="block sm:inline-flex">
+          <Button className="w-full sm:w-auto">Download PDF</Button>
         </a>
         <EmailModal
           invoiceId={invoice.id}
@@ -56,8 +56,10 @@ export default async function InvoiceDetailPage({
           initialSubject={`Invoice #${invoice.invoiceNumber} from ${profile.businessName}`}
           botFileName={invoice.botFile?.fileName}
         />
-        <Link href="/invoices">
-          <Button variant="outline">Back to Invoices</Button>
+        <Link href="/invoices" className="block sm:inline-flex">
+          <Button variant="outline" className="w-full sm:w-auto">
+            Back to Invoices
+          </Button>
         </Link>
       </div>
       <InvoicePreview invoice={previewData} />

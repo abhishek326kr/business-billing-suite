@@ -67,10 +67,10 @@ export function InvoicesClient({
   return (
     <Card>
       <CardHeader className="space-y-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle>Invoices</CardTitle>
-          <Link href="/invoices/new">
-            <Button>New Invoice</Button>
+          <Link href="/invoices/new" className="block sm:inline-flex">
+            <Button className="w-full sm:w-auto">New Invoice</Button>
           </Link>
         </div>
 
@@ -93,7 +93,7 @@ export function InvoicesClient({
         </div>
       </CardHeader>
       <CardContent>
-        <div className="overflow-x-auto">
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full min-w-[900px] text-sm">
             <thead>
               <tr className="border-b border-border text-left text-slate-500">
@@ -146,6 +146,56 @@ export function InvoicesClient({
               ) : null}
             </tbody>
           </table>
+        </div>
+        <div className="space-y-3 md:hidden">
+          {filtered.map((invoice) => (
+            <div key={invoice.id} className="rounded-xl border border-border p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate font-medium text-slate-900">{invoice.invoiceNumber}</p>
+                  <p className="mt-1 truncate text-sm text-slate-500">{invoice.customer.name}</p>
+                </div>
+                <Badge variant={invoice.status === "paid" ? "success" : "destructive"}>
+                  {invoice.status.toUpperCase()}
+                </Badge>
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-slate-500">Date</p>
+                  <p className="font-medium text-slate-700">{formatDate(invoice.date)}</p>
+                </div>
+                <div>
+                  <p className="text-slate-500">Amount</p>
+                  <p className="font-medium text-slate-700">{formatCurrency(invoice.amount, invoice.currency)}</p>
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-2">
+                <Link href={`/invoices/${invoice.id}`} className="block">
+                  <Button variant="outline" className="w-full">
+                    View PDF
+                  </Button>
+                </Link>
+                <a href={`/api/invoices/${invoice.id}/pdf`} target="_blank" className="block">
+                  <Button type="button" variant="outline" className="w-full">
+                    Download PDF
+                  </Button>
+                </a>
+                <Link href={`/invoices/${invoice.id}`} className="block">
+                  <Button variant="outline" className="w-full">
+                    Send Email
+                  </Button>
+                </Link>
+                <Button variant="destructive" className="w-full" onClick={() => deleteInvoice(invoice.id)}>
+                  Delete
+                </Button>
+              </div>
+            </div>
+          ))}
+          {filtered.length === 0 ? (
+            <p className="py-4 text-center text-sm text-slate-500">No invoices match the current filters.</p>
+          ) : null}
         </div>
       </CardContent>
     </Card>

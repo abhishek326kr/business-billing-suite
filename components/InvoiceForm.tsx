@@ -194,10 +194,11 @@ export function InvoiceForm({
 
           {message ? <p className="md:col-span-2 text-sm text-red-600">{message}</p> : null}
 
-          <div className="md:col-span-2 flex flex-wrap gap-3">
+          <div className="grid gap-3 md:col-span-2 sm:flex sm:flex-wrap">
             <Button
               type="button"
               variant="outline"
+              className="w-full sm:w-auto"
               onClick={() => {
                 const currentForm = formRef.current;
                 if (!currentForm) return;
@@ -215,12 +216,14 @@ export function InvoiceForm({
             >
               Preview Invoice
             </Button>
-            <Button type="submit" disabled={pending}>
+            <Button type="submit" className="w-full sm:w-auto" disabled={pending}>
               {pending ? "Generating..." : "Save & Generate Invoice"}
             </Button>
           </div>
 
-          {previewUrl ? <p className="md:col-span-2 text-sm text-slate-500">Preview route: {previewUrl}</p> : null}
+          {previewUrl ? (
+            <p className="break-all text-sm text-slate-500 md:col-span-2">Preview route: {previewUrl}</p>
+          ) : null}
         </form>
       </CardContent>
     </Card>

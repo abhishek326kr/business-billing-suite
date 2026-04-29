@@ -36,7 +36,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <Card>
           <CardContent className="p-6">
             <p className="text-sm text-slate-500">Total Invoices</p>
@@ -57,12 +57,14 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      <div className="flex flex-wrap gap-3">
-        <Link href="/invoices/new">
-          <Button>New Invoice</Button>
+      <div className="grid gap-3 sm:flex sm:flex-wrap">
+        <Link href="/invoices/new" className="block sm:inline-flex">
+          <Button className="w-full sm:w-auto">New Invoice</Button>
         </Link>
-        <Link href="/customers">
-          <Button variant="outline">Add Customer</Button>
+        <Link href="/customers" className="block sm:inline-flex">
+          <Button variant="outline" className="w-full sm:w-auto">
+            Add Customer
+          </Button>
         </Link>
       </div>
 
@@ -71,7 +73,7 @@ export default async function DashboardPage() {
           <CardTitle>Recent Invoices</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[700px] text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-slate-500">
@@ -101,6 +103,34 @@ export default async function DashboardPage() {
                 ) : null}
               </tbody>
             </table>
+          </div>
+          <div className="space-y-3 md:hidden">
+            {recentInvoices.map((invoice) => (
+              <div key={invoice.id} className="rounded-xl border border-border p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-slate-900">{invoice.invoiceNumber}</p>
+                    <p className="mt-1 truncate text-sm text-slate-500">{invoice.customer.name}</p>
+                  </div>
+                  <p className="shrink-0 text-sm font-semibold text-slate-900">
+                    {formatCurrency(invoice.amount, invoice.currency)}
+                  </p>
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-slate-500">Date</p>
+                    <p className="font-medium text-slate-700">{formatDate(invoice.date)}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500">Status</p>
+                    <p className="font-medium text-slate-700">{invoice.status.toUpperCase()}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {recentInvoices.length === 0 ? (
+              <p className="py-4 text-center text-sm text-slate-500">No invoices yet.</p>
+            ) : null}
           </div>
         </CardContent>
       </Card>

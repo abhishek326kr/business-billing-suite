@@ -170,7 +170,7 @@ export function ProfileForm({ profile }: ProfileFormProps) {
             {message ? <p className="md:col-span-2 text-sm text-slate-600">{message}</p> : null}
 
             <div className="md:col-span-2">
-              <Button type="submit" disabled={pending}>
+              <Button type="submit" className="w-full sm:w-auto" disabled={pending}>
                 {pending ? "Saving..." : "Save Profile"}
               </Button>
             </div>

@@ -64,7 +64,7 @@ export function CustomerForm({
   }
 
   return (
-    <form action={handleSubmit} className="grid gap-4 md:grid-cols-2">
+    <form action={handleSubmit} className="grid gap-4 md:grid-cols-2 xl:grid-cols-1">
       <div>
         <Label htmlFor="name">Name</Label>
         <Input id="name" name="name" defaultValue={customer?.name || ""} required />
@@ -97,13 +97,13 @@ export function CustomerForm({
         <Label htmlFor="pincode">Pincode</Label>
         <Input id="pincode" name="pincode" defaultValue={customer?.pincode || ""} />
       </div>
-      {error ? <p className="md:col-span-2 text-sm text-red-600">{error}</p> : null}
-      <div className="md:col-span-2 flex gap-3">
-        <Button type="submit" disabled={pending}>
+      {error ? <p className="text-sm text-red-600 md:col-span-2 xl:col-span-1">{error}</p> : null}
+      <div className="grid gap-3 md:col-span-2 sm:flex xl:col-span-1 xl:grid">
+        <Button type="submit" className="w-full sm:w-auto xl:w-full" disabled={pending}>
           {pending ? "Saving..." : customer?.id ? "Update Customer" : "Add Customer"}
         </Button>
         {onCancel ? (
-          <Button type="button" variant="outline" onClick={onCancel}>
+          <Button type="button" variant="outline" className="w-full sm:w-auto xl:w-full" onClick={onCancel}>
             Cancel
           </Button>
         ) : null}

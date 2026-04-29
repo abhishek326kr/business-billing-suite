@@ -40,7 +40,7 @@ export function FilesClient({ initialFiles }: { initialFiles: BotFile[] }) {
         <FileUpload onUploaded={refreshFiles} />
       </CardHeader>
       <CardContent>
-        <div className="overflow-x-auto">
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full min-w-[720px] text-sm">
             <thead>
               <tr className="border-b border-border text-left text-slate-500">
@@ -81,6 +81,38 @@ export function FilesClient({ initialFiles }: { initialFiles: BotFile[] }) {
               ) : null}
             </tbody>
           </table>
+        </div>
+        <div className="space-y-3 md:hidden">
+          {files.map((file) => (
+            <div key={file.id} className="rounded-xl border border-border p-4">
+              <p className="break-words font-medium text-slate-900">{file.fileName}</p>
+              <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-slate-500">Size</p>
+                  <p className="font-medium text-slate-700">
+                    {file.fileSize ? `${(file.fileSize / 1024 / 1024).toFixed(2)} MB` : "Unknown"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-slate-500">Uploaded</p>
+                  <p className="font-medium text-slate-700">{formatDate(file.uploadedAt)}</p>
+                </div>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <a href={file.filePath} target="_blank" className="block">
+                  <Button variant="outline" type="button" className="w-full">
+                    View
+                  </Button>
+                </a>
+                <Button variant="destructive" type="button" onClick={() => deleteFile(file.id)}>
+                  Delete
+                </Button>
+              </div>
+            </div>
+          ))}
+          {files.length === 0 ? (
+            <p className="py-4 text-center text-sm text-slate-500">No files uploaded yet.</p>
+          ) : null}
         </div>
       </CardContent>
     </Card>
